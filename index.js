@@ -127,6 +127,16 @@ const waitForNextLine = (time) => {
    });
 };
 
+const createParseIter = async (startPage, endPage, parseFunc) => {
+  const promisesArr = [];
+
+  for (let page = startPage; page < endPage + 1; page+= 1) {
+    const promiseFunc = parseFunc(page);
+    promisesArr.push(promiseFunc);
+  }
+    return promisesArr;
+};
+
 
 const parser = async () => {
     const { browser, userSearchParams } = await getUserParametrs()
@@ -141,7 +151,7 @@ const parser = async () => {
         }
       }
       return {
-        browser: await puppeteer.launch({headless: false,}),
+        browser: await puppeteer.launch({headless: true,}),
         userSearchParams: {
           companyType:  data.companyType,
           region:  data.region,
@@ -153,27 +163,51 @@ const parser = async () => {
         companyType: userSearchParams.companyType,
         companyRegion: userSearchParams.region
       }
-    const page = await browser.newPage();
 
     const initParser = async () => {
       if (!fs.existsSync(parserSettings.outputFolder)) {
         fs.mkdirSync(parserSettings.outputFolder, { recursive: true });
         fs.writeFileSync(`${parserSettings.outputFolder}/companies.json`, '');
       }
-
-      await page.goto('https://orgpage.ru', {waitUntil: 'domcontentloaded'});
     };
 
-    const searchCompanies = async () => {
+    const searchCompanies = async (pageNum=0) => {
+      const page = await browser.newPage();
+      await page.goto('https://orgpage.ru', {waitUntil: 'domcontentloaded'});
+      
+      if (pageNum === 0) {
+        await page.waitForSelector("#query-text", { timeout: 10000 });
+        await page.$eval('#query-text', (e) => e);
+        await page.type('#query-text', `${parserSettings.userSearchParams.companyType}`, {delay: 100});
+        await page.type('#query-location', `${parserSettings.userSearchParams.companyRegion}`, {delay: 100});
+        await waitForNextLine(2000);
+        await page.click('.btn.btn-submit.btn-yellow.btn-block');
+
+        await page.waitForSelector('.object-item.similar-item', { visible: true, timeout: 10000});
+
+        parserSettings.pageSettings = await getCurrentPage(page);
+
+        const cardsInfo = await getCardsInfo(page)
+        const companyCards = await getAdditionalCardInfo(browser, cardsInfo);
+        parserSettings.companiesData.companies.push(...companyCards);
+
+        await saveParseData(parserSettings.companiesData.companies, parserSettings.outputPath)
+        .then(async () =>  await page.close());
+        
+        return parserSettings.pageSettings;
+      }
+
       await page.waitForSelector("#query-text", { timeout: 10000 });
       await page.$eval('#query-text', (e) => e);
       await page.type('#query-text', `${parserSettings.userSearchParams.companyType}`, {delay: 100});
       await page.type('#query-location', `${parserSettings.userSearchParams.companyRegion}`, {delay: 100});
       await waitForNextLine(2000);
       await page.click('.btn.btn-submit.btn-yellow.btn-block');
-
+      await page.waitForSelector(".footer-navigation.paging", { timeout: 10000 });
+      await waitForNextLine(2000);
+      const nextPage = pageNum !== 0 ? pageNum : parserSettings.pageSettings.nextPage;
+      await moveToNextPage(page, nextPage).then(async () => await waitForNextLine(3000))
       await page.waitForSelector('.object-item.similar-item', { visible: true, timeout: 10000});
-
       parserSettings.pageSettings = await getCurrentPage(page);
 
       const cardsInfo = await getCardsInfo(page)
@@ -181,40 +215,23 @@ const parser = async () => {
       parserSettings.companiesData.companies.push(...companyCards);
 
       await saveParseData(parserSettings.companiesData.companies, parserSettings.outputPath)
+      .then(async () =>  await page.close());
 
-      // await waitForNextLine(2000);
-      // await moveToNextPage(page, parserSettings.pageSettings.nextPage);
-
+      return parserSettings.pageSettings;
 
     };
     initParser();
-    searchCompanies();
+    searchCompanies(2).then(async (data) => {
+      // const searchStack = createParseIter(1, 3, searchCompanies);
+      // console.log(searchStack)
+      // await Promise.all(searchStack);
+      console.log(data)
+    });
+    
+
     
 };
 
 parser();
 
 
-
-
-
-
-
-// initParser(browser, page);
-// searchCompanies();
-
-// async function init() {
-//   const browser = await puppeteer.launch({
-//     headless: false,
-//   });
-//   const page = await browser.newPage();
-//   await page.goto('https://orgpage.ru');
-//   await page.waitForSelector("#query-text", { timeout: 10000 });
-  
-// //   const searchInput = await page.$eval('#query-text', (e) => e);
-//   await page.type('#query-text', 'Эстетические косметологии', {delay: 100});
-//   await page.type('#query-location', 'Санкт-Петербург', {delay: 100});
-//   await page.click('.btn.btn-submit.btn-yellow.btn-block');
-// }
-
-// init();
