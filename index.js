@@ -3,8 +3,9 @@ const puppeteer = require('puppeteer');
 const getUserParametrs = require('./parserCli/parserCli');
 const saveParseData = require('./utils/saveParseData');
 
-
+const searchStr = `https://www.orgpage.ru/search.html?q=%D0%AD%D1%81%D1%82%D0%B5%D1%82%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B5+%D0%BA%D0%BE%D1%81%D0%BC%D0%B5%D1%82%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D0%B8&loc=%D0%A1%D0%B0%D0%BD%D0%BA%D1%82-%D0%9F%D0%B5%D1%82%D0%B5%D1%80%D0%B1%D1%83%D1%80%D0%B3`;
 const parserSettings = {
+  mainUrl: 'https://orgpage.ru/',
   outputFolder: `${__dirname}/output`,
   outputFileName: 'companiesData.json',
   outputPath: `${__dirname}/output/companiesData.json`,
@@ -14,37 +15,42 @@ const parserSettings = {
     skip: true,
   },
   pageSettings: {
-    startPage: 0,
-    currentPage: 0,
-    nextPage: 0,
+    searchUrl: '',
+    currentPage:0,
     maxPage: 0,
+    nextPage: 0
   },
   companiesData: {
     companies: []
   }
-}
-
-const getCardsInfo = async (page) => {
-  return await page.evaluate(() => {
-    return new Promise((resolve, reject) => {
-      const cards = document.querySelectorAll('.object-item.similar-item');
-      resolve(Array.from(cards).map((cardItem) => {
-        const companyData = {
-          name: cardItem.querySelector('.similar-item__title').querySelector('a').textContent,
-          url: cardItem.querySelector('.similar-item__title').querySelector('a').getAttribute('href'),
-          phone: cardItem.querySelector('.similar-item__phone ').querySelector('.phone').textContent.trim(),
-          address: cardItem.querySelector('.similar-item__adrss-item').textContent.trim()
-        }
-        return companyData;
-      }));
-    });
-  });
 };
 
-const getInnerCardInfo = async (page, cardUrl) => {
+
+const waitForNextLine = (time) => {
+   return new Promise(function(resolve) { 
+    setTimeout(resolve, time)
+   });
+};
+
+const initFunc = async () => {
+    if (!fs.existsSync(parserSettings.outputFolder)) {
+        fs.mkdirSync(parserSettings.outputFolder, { recursive: true });
+        fs.writeFileSync(`${parserSettings.outputFolder}/companies.json`, '');
+    }
+    if (!parserSettings.userSearchParams.skip) {
+        const { companyType, region } = await getUserParametrs()
+        parserSettings.userSearchParams.companyType = companyType;
+        parserSettings.userSearchParams.region = region;
+    };
+};
+
+
+const getInnerCardInfo = async (cardUrl) => {
+    let browser = await puppeteer.launch({headless: false,});
+    const page = await browser.newPage();
     await page.goto(cardUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.company-information__row', { visible: true, timeout: 10000});
-   
+
     const data = await page.evaluate(() => {
       return new Promise((resolve, reject) => {
         let email, website, phone;
@@ -63,175 +69,93 @@ const getInnerCardInfo = async (page, cardUrl) => {
           email: `${email}`.replace(/\s/g, '')
         });
       });
-    });
+    })
     await page.close();
+    await browser.close();
+
     return data;
-
-
 };
 
-const getAdditionalCardInfo = async (browser, companiesData) => {
-  return new Promise((resolve, reject) => {
-    const data = Array.from(companiesData).map(async (cardInfo, i) => {
-      if (cardInfo.url) {
-        const page = await browser.newPage();
-        const additionalData  = await getInnerCardInfo(page, cardInfo.url);
-        return {
-          ...additionalData,
-          name: cardInfo.name,
-          url: cardInfo.url,
-          phone: cardInfo.phone,
-          address:cardInfo.address,
-        };
-      }
-    });
-    Promise.all(data).then((values) => {
-      resolve(values);
-    });
-  })
-  
-};
-
-const getCurrentPage = async (page) => {
-  return await page.evaluate((parserSettings) => {
-    const footerNavArr = document.querySelector('.footer-navigation.paging').querySelectorAll('a.ng-binding')
-    const currentPage = document.querySelector('.ng-scope.active').querySelector('a').textContent;
-    let maxPage = 0;
-    if (Array.from(footerNavArr).length > 1) maxPage = Number(Array.from(footerNavArr).slice(-1)[0].textContent);
-    let nextPage = Number(currentPage) < maxPage ? Number(currentPage) + 1 : 1;
-
-    parserSettings.pageSettings = {
-      ...parserSettings.pageSettings,
-      currentPage: Number(currentPage),
-      maxPage: maxPage,
-      nextPage: nextPage
-    };
-    return parserSettings.pageSettings
-  }, parserSettings);
-};
-
-const moveToNextPage = async (page, pageNum) => {
-  return await page.evaluate((pageNumber) => {
-    const allPageNumbTags = document.querySelectorAll('.ng-binding')
-    Array.from(allPageNumbTags).forEach((pageNumTag) => {
-      if (Number(pageNumTag.textContent) === pageNumber) {
-        pageNumTag.click();
-      }
-    });
-  }, pageNum);
-};
-
-const waitForNextLine = (time) => {
-   return new Promise(function(resolve) { 
-       setTimeout(resolve, time)
-   });
-};
-
-const createParseIter = async (startPage, endPage, parseFunc) => {
-  const promisesArr = [];
-
-  for (let page = startPage; page < endPage + 1; page+= 1) {
-    const promiseFunc = parseFunc(page);
-    promisesArr.push(promiseFunc);
-  }
-    return promisesArr;
-};
-
-
-const parser = async () => {
-    const { browser, userSearchParams } = await getUserParametrs()
-    .then(async (data) => {
-      if (parserSettings.userSearchParams.skip) {
-        return {
-          browser: await puppeteer.launch({headless: true,}),
-          userSearchParams: {
-            companyType:  parserSettings.userSearchParams.companyType,
-            region:  parserSettings.userSearchParams.companyRegion,
-          }
-        }
-      }
-      return {
-        browser: await puppeteer.launch({headless: true,}),
-        userSearchParams: {
-          companyType:  data.companyType,
-          region:  data.region,
-        }
-      }
-    });
-      parserSettings.userSearchParams = {
-        ...parserSettings.userSearchParams,
-        companyType: userSearchParams.companyType,
-        companyRegion: userSearchParams.region
-      }
-
-    const initParser = async () => {
-      if (!fs.existsSync(parserSettings.outputFolder)) {
-        fs.mkdirSync(parserSettings.outputFolder, { recursive: true });
-        fs.writeFileSync(`${parserSettings.outputFolder}/companies.json`, '');
-      }
-    };
-
-    const searchCompanies = async (pageNum=0) => {
-      const page = await browser.newPage();
-      await page.goto('https://orgpage.ru', {waitUntil: 'domcontentloaded'});
-      
-      if (pageNum === 0) {
-        await page.waitForSelector("#query-text", { timeout: 10000 });
-        await page.$eval('#query-text', (e) => e);
-        await page.type('#query-text', `${parserSettings.userSearchParams.companyType}`, {delay: 100});
-        await page.type('#query-location', `${parserSettings.userSearchParams.companyRegion}`, {delay: 100});
-        await waitForNextLine(2000);
-        await page.click('.btn.btn-submit.btn-yellow.btn-block');
-
-        await page.waitForSelector('.object-item.similar-item', { visible: true, timeout: 10000});
-
-        parserSettings.pageSettings = await getCurrentPage(page);
-
-        const cardsInfo = await getCardsInfo(page)
-        const companyCards = await getAdditionalCardInfo(browser, cardsInfo);
-        parserSettings.companiesData.companies.push(...companyCards);
-
-        await saveParseData(parserSettings.companiesData.companies, parserSettings.outputPath)
-        .then(async () =>  await page.close());
-        
-        return parserSettings.pageSettings;
-      }
-
-      await page.waitForSelector("#query-text", { timeout: 10000 });
-      await page.$eval('#query-text', (e) => e);
-      await page.type('#query-text', `${parserSettings.userSearchParams.companyType}`, {delay: 100});
-      await page.type('#query-location', `${parserSettings.userSearchParams.companyRegion}`, {delay: 100});
-      await waitForNextLine(2000);
-      await page.click('.btn.btn-submit.btn-yellow.btn-block');
-      await page.waitForSelector(".footer-navigation.paging", { timeout: 10000 });
-      await waitForNextLine(2000);
-      const nextPage = pageNum !== 0 ? pageNum : parserSettings.pageSettings.nextPage;
-      await moveToNextPage(page, nextPage).then(async () => await waitForNextLine(3000))
-      await page.waitForSelector('.object-item.similar-item', { visible: true, timeout: 10000});
-      parserSettings.pageSettings = await getCurrentPage(page);
-
-      const cardsInfo = await getCardsInfo(page)
-      const companyCards = await getAdditionalCardInfo(browser, cardsInfo);
-      parserSettings.companiesData.companies.push(...companyCards);
-
-      await saveParseData(parserSettings.companiesData.companies, parserSettings.outputPath)
-      .then(async () =>  await page.close());
-
-      return parserSettings.pageSettings;
-
-    };
-    initParser();
-    searchCompanies(2).then(async (data) => {
-      // const searchStack = createParseIter(1, 3, searchCompanies);
-      // console.log(searchStack)
-      // await Promise.all(searchStack);
-      console.log(data)
-    });
+const moveToNextPage = async (pageObj) => {
+    await waitForNextLine(2000)
+    const page = pageObj;
+    await page.evaluate(async () => window.scrollTo(0,10000))
+    .then(async () => {
+        await page.evaluate(async () => {
+            document.querySelector('.footer-navigation.paging').querySelectorAll("li:last-of-type")[0].querySelector('a').click()
+        });
+    })
     
-
-    
+    return page;
 };
 
-parser();
+const skipmove = async (pageObj) => {
+    const page = pageObj;
+
+    return page;
+};
+
+const parsePageFunc = async(url, maxPages, page, start=false) => {
+    let maxIters = maxPages;
+    if (start) await page.goto(url, {waitUntil: 'domcontentloaded'})
+    await skipmove(page)
+    .then(async (page) => {
+        await waitForNextLine(2000)
+        await page.waitForSelector('.object-item.similar-item', { timeout: 10000 });
+
+        const companyData = await page.evaluate(() => {
+            const cards = document.querySelectorAll('.object-item.similar-item');
+            return Array.from(cards).map((cardItem) => {
+                const companyData = {
+                    name: cardItem.querySelector('.similar-item__title').querySelector('a').textContent,
+                    url: cardItem.querySelector('.similar-item__title').querySelector('a').getAttribute('href'),
+                    phone: cardItem.querySelector('.similar-item__phone ').querySelector('.phone').textContent.trim(),
+                    address: cardItem.querySelector('.similar-item__adrss-item').textContent.trim()
+                }
+                return companyData;
+            });
+        });
+        return {pageObj: page, companyData: companyData };
+    })
+    .then(async (nextData) => {
+        const companyInfoTasks = nextData.companyData.map(async (cardInfo) => {
+            const additionalData = await getInnerCardInfo(cardInfo.url)
+            return {
+            ...additionalData,
+            name: cardInfo.name,
+            url: cardInfo.url,
+            phone: cardInfo.phone,
+            address:cardInfo.address,
+            };
+        });
+        return {companyData: await Promise.all(companyInfoTasks), pageObj: nextData.pageObj}
+    })
+    .then(async (nextData) => {
+        parserSettings.companiesData.companies.push(...nextData.companyData);
+        await saveParseData(parserSettings.companiesData.companies, parserSettings.outputPath);
+        return {pageObj: nextData.pageObj }
+    })
+    .then(async (nextData) => {
+        maxIters -= 1;
+        if (maxIters > 0) {
+            await waitForNextLine(3000)
+            await moveToNextPage(nextData.pageObj)
+            .then(async (pageObj) => {
+                await parsePageFunc(url, maxIters, pageObj)
+            })
+        }
+    })
+
+};
+
+initFunc();
+(async () => {
+    const browser = await puppeteer.launch({headless: false,});
+    const page = await browser.newPage();
+    const startParser = true;
+    const maxPages = 10;
+    parsePageFunc(searchStr, maxPages, page, startParser)
+})()
 
 
+// parsePageFunc(searchStr, 5);

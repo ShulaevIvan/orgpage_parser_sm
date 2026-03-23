@@ -15,8 +15,9 @@ const searchParams = [
 
 const getUserParametrs = async () => {
     const response = await prompts(searchParams);
+
     return response;
-}
+};
 
 
 
