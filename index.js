@@ -26,11 +26,7 @@ const parserSettings = {
 };
 
 
-const waitForNextLine = (time) => {
-   return new Promise(function(resolve) { 
-    setTimeout(resolve, time)
-   });
-};
+
 
 const initFunc = async () => {
     if (!fs.existsSync(parserSettings.outputFolder)) {
@@ -42,7 +38,23 @@ const initFunc = async () => {
         parserSettings.userSearchParams.companyType = companyType;
         parserSettings.userSearchParams.region = region;
     };
+
+    return getUserParametrs();
 };
+
+const startParser = async () => {
+    const browser = await puppeteer.launch({headless: false,});
+    const page = await browser.newPage();
+    const maxPages = 10;
+    parsePageFunc(searchStr, maxPages, page, true);
+};
+
+const waitForNextLine = (time) => {
+   return new Promise(function(resolve) { 
+    setTimeout(resolve, time)
+   });
+};
+
 
 
 const getInnerCardInfo = async (cardUrl) => {
@@ -148,14 +160,8 @@ const parsePageFunc = async(url, maxPages, page, start=false) => {
 
 };
 
-initFunc();
-(async () => {
-    const browser = await puppeteer.launch({headless: false,});
-    const page = await browser.newPage();
-    const startParser = true;
-    const maxPages = 10;
-    parsePageFunc(searchStr, maxPages, page, startParser)
-})()
-
-
-// parsePageFunc(searchStr, 5);
+const searchP = initFunc()
+.then((data) => {
+    console.log(data)
+});
+// startParser();
