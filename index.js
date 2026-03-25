@@ -1,64 +1,56 @@
 const fs = require('fs');
 const puppeteer = require('puppeteer');
+
 const getUserParametrs = require('./parserCli/parserCli');
 const saveParseData = require('./utils/saveParseData');
 
-const searchStr = `https://www.orgpage.ru/search.html?q=%D0%AD%D1%81%D1%82%D0%B5%D1%82%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B5+%D0%BA%D0%BE%D1%81%D0%BC%D0%B5%D1%82%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D0%B8&loc=%D0%A1%D0%B0%D0%BD%D0%BA%D1%82-%D0%9F%D0%B5%D1%82%D0%B5%D1%80%D0%B1%D1%83%D1%80%D0%B3`;
-const parserSettings = {
-  mainUrl: 'https://orgpage.ru/',
-  outputFolder: `${__dirname}/output`,
-  outputFileName: 'companiesData.json',
-  outputPath: `${__dirname}/output/companiesData.json`,
-  userSearchParams: {
-    companyType: 'Эстетические Косметологии',
-    companyRegion: 'Санкт-Петербург',
-    skip: true,
-  },
-  pageSettings: {
-    searchUrl: '',
-    currentPage:0,
-    maxPage: 0,
-    nextPage: 0
-  },
-  companiesData: {
-    companies: []
-  }
-};
-
-
-
+const parserSettings = require('./config/parserSettings');
 
 const initFunc = async () => {
     if (!fs.existsSync(parserSettings.outputFolder)) {
         fs.mkdirSync(parserSettings.outputFolder, { recursive: true });
-        fs.writeFileSync(`${parserSettings.outputFolder}/companies.json`, '');
+        fs.writeFileSync(`${parserSettings.outputFolder}/companiesData.json.json`, '');
     }
-    if (!parserSettings.userSearchParams.skip) {
-        const { companyType, region } = await getUserParametrs()
-        parserSettings.userSearchParams.companyType = companyType;
-        parserSettings.userSearchParams.region = region;
-    };
-
-    return getUserParametrs();
+    const searchStr = await getUserParametrs(parserSettings);
+    parserSettings.currentSearchStr = searchStr;
 };
 
-const startParser = async () => {
-    const browser = await puppeteer.launch({headless: false,});
+const startParser = async (searchStr) => {
+    const browser = await puppeteer.launch({headless: true,});
     const page = await browser.newPage();
-    const maxPages = 10;
+    const maxPages =  parserSettings.pageSettings.maxPage;
+    parserSettings.progerssBar.start(maxPages, 0);
     parsePageFunc(searchStr, maxPages, page, true);
 };
 
-const waitForNextLine = (time) => {
+const getMaxPagesBySearchParam = async (searchUrl) => {
+    const browser = await puppeteer.launch({headless: true,});
+    const page = await browser.newPage();
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.footer-navigation.paging', { visible: true, timeout: 10000})
+    const maxPages = await page.evaluate(async () => {
+        const allNavTags = Array.from(document.querySelector('.footer-navigation.paging').querySelectorAll('.ng-binding'));
+        const firstNavTag = allNavTags.shift().textContent;
+        const lastNavTag = allNavTags.pop().textContent;
+        return { 
+            firstPage: Number(firstNavTag),
+            lastPage: Number(lastNavTag)
+        };
+    });
+    await browser.close();
+    
+    return maxPages;
+};
+
+
+const waitForNextLine = (time) => { 
    return new Promise(function(resolve) { 
     setTimeout(resolve, time)
    });
 };
 
-
-
 const getInnerCardInfo = async (cardUrl) => {
-    let browser = await puppeteer.launch({headless: false,});
+    let browser = await puppeteer.launch({headless: true,});
     const page = await browser.newPage();
     await page.goto(cardUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.company-information__row', { visible: true, timeout: 10000});
@@ -89,7 +81,7 @@ const getInnerCardInfo = async (cardUrl) => {
 };
 
 const moveToNextPage = async (pageObj) => {
-    await waitForNextLine(2000)
+    await waitForNextLine(5000)
     const page = pageObj;
     await page.evaluate(async () => window.scrollTo(0,10000))
     .then(async () => {
@@ -144,24 +136,31 @@ const parsePageFunc = async(url, maxPages, page, start=false) => {
     })
     .then(async (nextData) => {
         parserSettings.companiesData.companies.push(...nextData.companyData);
+        await waitForNextLine(1000)
         await saveParseData(parserSettings.companiesData.companies, parserSettings.outputPath);
         return {pageObj: nextData.pageObj }
     })
     .then(async (nextData) => {
         maxIters -= 1;
+        parserSettings.progerssBar.increment();
         if (maxIters > 0) {
-            await waitForNextLine(3000)
             await moveToNextPage(nextData.pageObj)
             .then(async (pageObj) => {
                 await parsePageFunc(url, maxIters, pageObj)
             })
         }
+        parserSettings.progerssBar.stop();
+        
     })
 
 };
 
-const searchP = initFunc()
-.then((data) => {
-    console.log(data)
+initFunc(parserSettings).then(async () => {
+    await getMaxPagesBySearchParam(parserSettings.currentSearchStr)
+    .then(async (pageData) => {
+        parserSettings.pageSettings.firstPage = pageData.firstPage;
+        parserSettings.pageSettings.maxPage = pageData.lastPage;
+    })
+    .then(async () => await startParser(parserSettings.currentSearchStr))
+   
 });
-// startParser();

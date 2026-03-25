@@ -6,7 +6,6 @@ const readJsonFile = async (filePath) => {
     const data = await fs.readFile(filePath, "utf8");
     return JSON.parse(data);
   } catch (error) {
-    console.error(`Error reading ${filePath}: ${error}`);
     return [];
   }
 };
