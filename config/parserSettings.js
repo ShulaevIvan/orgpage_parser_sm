@@ -4,7 +4,7 @@ const colors = require('ansi-colors');
 
 
 const parserSettings = {
-    mainUrl: 'https://orgpage.ru/',
+    mainUrl: 'https://orgpage.ru',
     currentSearchStr: '',
     outputFolder: path.resolve(`${__dirname}`, '..', 'output'),
     outputFileName: 'companiesData.json',

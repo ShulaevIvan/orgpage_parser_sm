@@ -42,6 +42,27 @@ const getMaxPagesBySearchParam = async (searchUrl) => {
     return maxPages;
 };
 
+const getSearchCategories = async (searchUrl) => {
+    let browser = await puppeteer.launch({headless: false,});
+    const page = await browser.newPage();
+    const mainUrl = parserSettings.mainUrl;
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.catalog-list.catalog-wrapper', { visible: true, timeout: 10000});
+    return await page.evaluate(async (searchMainUrl) => {
+        const linkListArr = []
+
+        const allLinkLists = document.querySelector('.result-rubrics.catalog-header__rubrics').querySelector('.row').querySelectorAll('.link-list')
+        .forEach((linkList) => linkList.querySelectorAll('li').forEach((linkItem) => {
+            linkListArr.push({
+                name: linkItem.querySelector('a').textContent,
+                link: `${searchMainUrl}${linkItem.querySelector('a').getAttribute('href')}`,
+                qnt: Number(linkItem.textContent.replace(/\W+/, ''))
+            })
+        }));
+        return linkListArr
+    }, mainUrl);
+};
+
 
 const waitForNextLine = (time) => { 
    return new Promise(function(resolve) { 
@@ -152,15 +173,21 @@ const parsePageFunc = async(url, maxPages, page, start=false) => {
         parserSettings.progerssBar.stop();
         
     })
-
 };
 
-initFunc(parserSettings).then(async () => {
-    await getMaxPagesBySearchParam(parserSettings.currentSearchStr)
-    .then(async (pageData) => {
-        parserSettings.pageSettings.firstPage = pageData.firstPage;
-        parserSettings.pageSettings.maxPage = pageData.lastPage;
-    })
-    .then(async () => await startParser(parserSettings.currentSearchStr))
+(async () => {
+    const testStr = 'https://www.orgpage.ru/search.html?q=%D0%9A%D0%BE%D1%81%D0%BC%D0%B5%D1%82%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D0%B8&loc=%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0&forReplies=false';
+    const cat = await getSearchCategories(testStr)
+    console.log(cat)
+})();
+// initFunc(parserSettings).then(async () => {
+//     await getMaxPagesBySearchParam(parserSettings.currentSearchStr)
+//     .then(async (pageData) => {
+//         parserSettings.pageSettings.firstPage = pageData.firstPage;
+//         parserSettings.pageSettings.maxPage = pageData.lastPage;
+//     })
+//     .then(async () => {
+//         // await startParser(parserSettings.currentSearchStr);
+//     })
    
-});
+// });
