@@ -41,7 +41,11 @@ const parserSettings = {
             name: 'region',
             message: 'Регион для поиска например: Москва'
         }
-    ]
+    ],
+    companySearchCount: {
+        lastNumber: 0,
+        autoSearch: false
+    }
 };
 
 
