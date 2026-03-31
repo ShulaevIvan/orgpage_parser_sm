@@ -45,6 +45,10 @@ const parserSettings = {
     companySearchCount: {
         lastNumber: 0,
         autoSearch: false
+    },
+    savedSearchParams: {
+        empty: false,
+        data: [{ name: 'СПА-процедуры', link: 'https://orgpage.ru/moskva/spa-protsedury/', qnt: 759,keyNum: 2}]
     }
 };
 
