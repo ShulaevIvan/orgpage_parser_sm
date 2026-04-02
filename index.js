@@ -6,6 +6,7 @@ const { createTaskFunc, runTasksFunc } = require('./utils/tasks');
 const saveParseData = require('./utils/saveParseData');
 
 const parserSettings = require('./config/parserSettings');
+const waitForNextLine = require('./utils/wait');
 
 const initParser = async () => {
     let pageData = parserSettings.savedSearchParams.data;
@@ -51,16 +52,20 @@ const getSearchCategories = async (searchUrl) => {
 };
 
 const parseCompaniesFunction = async (page, searchUrl) => {
-    if (page && page.url() !== searchUrl) await page.goto(searchUrl, {waitUntil: 'domcontentloaded'});
+    if (page && page.url().replace(/www./, '') !== searchUrl.replace(/www./, '')) {
+        await page.goto(searchUrl, {waitUntil: 'domcontentloaded'});
+        console.log('test')
+    }
 
     await page.waitForSelector('.sub-categories', { visible: true, timeout: 10000});
+    await waitForNextLine(3000)
 
     parserSettings.companySearchCount.lastNumber = await page.evaluate((companySearchCount) => {
         const cardsArr = Array.from(document.querySelectorAll('.object-item.similar-item'));
         const lastCard = cardsArr[cardsArr.length - 1];
                                 
         let lastNumber = lastCard.querySelector('.similar-item__title').querySelector('a').textContent.replace(/\s\W+/gm, '');
-        if (lastNumber === companySearchCount.lastNumber) {
+        if (Number(lastNumber.replace(/\.[^.]*$/, '')) <= Number(companySearchCount.lastNumber.replace(/\.[^.]*$/, ''))) {
             const nextBtn = document.querySelector('.rubricator-next-button').click();
             return new Promise(resolve => {
                 setTimeout(() => {
@@ -74,7 +79,7 @@ const parseCompaniesFunction = async (page, searchUrl) => {
         return lastNumber;
 
     }, parserSettings.companySearchCount);
-
+    console.log(parserSettings.companySearchCount.lastNumber)
     await page.evaluate((parserSettings) => {
         const cards = document.querySelectorAll('.object-item.similar-item');
         const companies = Array.from(cards).map((cardItem) => {
@@ -151,6 +156,6 @@ const getPageParametrs = async (parserSettings) => {
 initParser()
 .then(async (data) => {
     const { page, link, qnt } = data;
-    const taskList = await createTaskFunc(60, () => parseCompaniesFunction(page, link));
+    const taskList = await createTaskFunc(qnt, () => parseCompaniesFunction(page, link));
     runTasksFunc(0, taskList).then(() => console.log("Марш окончен. Пора на заслуженный отдых!"));
 })

@@ -43,7 +43,7 @@ const parserSettings = {
         }
     ],
     companySearchCount: {
-        lastNumber: 0,
+        lastNumber: '0.',
         autoSearch: false
     },
     savedSearchParams: {
