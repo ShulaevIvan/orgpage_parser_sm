@@ -1,4 +1,4 @@
-const path = require('path')
+const path = require('path');
 const cliProgress = require('cli-progress');
 const colors = require('ansi-colors');
 
@@ -48,7 +48,7 @@ const parserSettings = {
     },
     savedSearchParams: {
         empty: false,
-        data: [{ name: 'СПА-процедуры', link: 'https://orgpage.ru/moskva/spa-protsedury/', qnt: 759,keyNum: 2}]
+        data: [{ name: 'Косметология', link: 'https://www.orgpage.ru/sankt-peterburg/kosmetologicheskie-uslugi/', qnt: 3078,keyNum: 2}]
     }
 };
 

@@ -7,6 +7,7 @@ const saveParseData = require('./utils/saveParseData');
 
 const parserSettings = require('./config/parserSettings');
 const waitForNextLine = require('./utils/wait');
+const filterJsonData = require('./utils/fiterJson');
 
 const initParser = async () => {
     let pageData = parserSettings.savedSearchParams.data;
@@ -31,7 +32,7 @@ const initParser = async () => {
 };
 
 const getSearchCategories = async (searchUrl) => {
-    let browser = await puppeteer.launch({headless: true,});
+    let browser = await puppeteer.launch({headless: false,});
     const page = await browser.newPage();
     const mainUrl = parserSettings.mainUrl;
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
@@ -116,7 +117,7 @@ const getInnerCardInfo = async (cardUrl) => {
     await page.goto(cardUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.company-information__row', { visible: true, timeout: 10000});
 
-    const data = await page.evaluate(() => {
+    const data = await page.evaluate((url) => {
       return new Promise((resolve, reject) => {
         let email, website, phone;
         const companyInfoWrap = document.querySelector('.company-information__site-text');
@@ -131,10 +132,11 @@ const getInnerCardInfo = async (cardUrl) => {
         resolve({
           phone: `${phone}`.replace(/\s/g, ''),
           site: `${website}`.replace(/\s/g, ''),
-          email: `${email}`.replace(/\s/g, '')
+          email: `${email}`.replace(/\s/g, ''),
+          url: url
         });
       });
-    })
+    }, cardUrl)
     await page.close();
     await browser.close();
 
@@ -153,9 +155,24 @@ const getPageParametrs = async (parserSettings) => {
 
 
 
-initParser()
-.then(async (data) => {
-    const { page, link, qnt } = data;
-    const taskList = await createTaskFunc(qnt, () => parseCompaniesFunction(page, link));
-    runTasksFunc(0, taskList).then(() => console.log("Марш окончен. Пора на заслуженный отдых!"));
+filterJsonData()
+.then(async (filterData) => {
+    const urls = filterData.map((companyItem) => companyItem.url).slice(0, 50);
+
+    const promArr = urls.map((url) => {
+        return new Promise((resolve, reject) => {
+            const data = getInnerCardInfo(url).then((data) => console.log(data));
+            resolve(data)
+        });
+    });
+    await Promise.all(promArr);
+
 })
+
+
+// initParser()
+// .then(async (data) => {
+//     const { page, link, qnt } = data;
+//     const taskList = await createTaskFunc(qnt, () => parseCompaniesFunction(page, link));
+//     runTasksFunc(0, taskList).then(() => console.log("Марш окончен. Пора на заслуженный отдых!"));
+// })
