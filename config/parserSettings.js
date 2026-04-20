@@ -9,6 +9,7 @@ const parserSettings = {
     outputFolder: path.resolve(`${__dirname}`, '..', 'output'),
     outputFileName: 'companiesData.json',
     outputPath: `${path.resolve(`${__dirname}`, '..', 'output')}/companiesData.json`,
+    outputAddPath: `${path.resolve(`${__dirname}`, '..', 'output')}/additionalData.json`,
     progerssBar: new cliProgress.SingleBar({
         format: 'CLI Progress |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Pages',
         barCompleteChar: '\u2588',

@@ -15,9 +15,20 @@ const runTasks = async (index, tasksArr) => {
     await runTasks(index + 1, tasksArr);
 };
 
+const inlineTasks = async (tasks) => {
+  const collectData = [];
+
+  for (const task of tasks) {
+    await task.func(task.url).then(async (data) => { collectData.push(data)});
+  };
+
+  return collectData;
+};
+
 
 module.exports = {
     createTaskFunc: createTasks,
-    runTasksFunc: runTasks
-}
+    runTasksFunc: runTasks,
+    inlineTasks: inlineTasks
+};
 

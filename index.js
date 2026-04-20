@@ -2,18 +2,20 @@ const fs = require('fs');
 const puppeteer = require('puppeteer');
 
 const { getUserParametrs, getPageStats, nextParse } = require('./parserCli/parserCli');
-const { createTaskFunc, runTasksFunc } = require('./utils/tasks');
+const { createTaskFunc, runTasksFunc, inlineTasks } = require('./utils/tasks');
 const saveParseData = require('./utils/saveParseData');
 
 const parserSettings = require('./config/parserSettings');
 const waitForNextLine = require('./utils/wait');
 const filterJsonData = require('./utils/fiterJson');
+const chunkArray = require('./utils/chunkArray');
 
 const initParser = async () => {
     let pageData = parserSettings.savedSearchParams.data;
     if (!fs.existsSync(parserSettings.outputFolder)) {
         fs.mkdirSync(parserSettings.outputFolder, { recursive: true });
-        fs.writeFileSync(`${parserSettings.outputFolder}/companiesData.json.json`, '');
+        fs.writeFileSync(`${parserSettings.outputFolder}/companiesData.json`, '');
+        fs.writeFileSync(`${parserSettings.outputFolder}/additionalData.json`, '');
     }
     if (parserSettings.savedSearchParams.empty) {
         pageData = await getPageParametrs(parserSettings);
@@ -22,7 +24,7 @@ const initParser = async () => {
     }
 
     const { link, qnt } = await getPageStats(pageData);
-    const browser = await puppeteer.launch({headless: false,});
+    const browser = await puppeteer.launch({headless: true,});
     const page = await browser.newPage();
     
     parserSettings.companySearchCount.autoSearch = true;
@@ -32,7 +34,7 @@ const initParser = async () => {
 };
 
 const getSearchCategories = async (searchUrl) => {
-    let browser = await puppeteer.launch({headless: false,});
+    let browser = await puppeteer.launch({headless: true,});
     const page = await browser.newPage();
     const mainUrl = parserSettings.mainUrl;
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
@@ -114,8 +116,8 @@ const parseCompaniesFunction = async (page, searchUrl) => {
 const getInnerCardInfo = async (cardUrl) => {
     let browser = await puppeteer.launch({headless: true,});
     const page = await browser.newPage();
-    await page.goto(cardUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.company-information__row', { visible: true, timeout: 10000});
+    await page.goto(cardUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForSelector('.company-information__row', { visible: true, timeout: 120000});
 
     const data = await page.evaluate((url) => {
       return new Promise((resolve, reject) => {
@@ -139,7 +141,7 @@ const getInnerCardInfo = async (cardUrl) => {
     }, cardUrl)
     await page.close();
     await browser.close();
-
+    console.log(`${cardUrl} - ok`)
     return data;
 };
 
@@ -153,26 +155,54 @@ const getPageParametrs = async (parserSettings) => {
     });
 };
 
+const createTaskOrder = async (dataArr) => {
+    const res = dataArr.map((url) => {
+        return {
+            url: url,
+            func: getInnerCardInfo
+        };
+    });
+    return res
+};
 
+
+// filterJsonData()
+// .then(async (filterData) => {
+//     const urls = filterData.map((companyItem) => companyItem.url);
+//     const tasksA = await createTaskOrder(urls)
+//     await inlineTasks(tasksA).then(async (data) => await saveParseData(data, parserSettings.outputAddPath));
+//     // console.log(chunkArray(urls, 10));
+//     // const promArr = urls.map((url) => {
+//     //     return new Promise((resolve, reject) => {
+//     //         const data = getInnerCardInfo(url).then((data) => console.log(data));
+//     //         resolve(data)
+//     //     });
+//     // });
+//     // await Promise.all(promArr);
+
+// })
 
 filterJsonData()
 .then(async (filterData) => {
-    const urls = filterData.map((companyItem) => companyItem.url).slice(0, 50);
-
-    const promArr = urls.map((url) => {
-        return new Promise((resolve, reject) => {
-            const data = getInnerCardInfo(url).then((data) => console.log(data));
-            resolve(data)
-        });
-    });
-    await Promise.all(promArr);
-
+    const urls = await (async () => filterData.map((companyItem) => companyItem.url))()
+    // console.log(chunkArray(urls, 10));
+    const tasksA = await createTaskOrder(urls)
+    await inlineTasks(tasksA).then(async (data) => await saveParseData(data, parserSettings.outputAddPath));
+    
 })
-
-
 // initParser()
 // .then(async (data) => {
 //     const { page, link, qnt } = data;
 //     const taskList = await createTaskFunc(qnt, () => parseCompaniesFunction(page, link));
-//     runTasksFunc(0, taskList).then(() => console.log("Марш окончен. Пора на заслуженный отдых!"));
+//     runTasksFunc(0, taskList).then(() => console.log('parse ready'));
+// })
+// .then(async () => {
+//     filterJsonData()
+//     .then(async (filterData) => {
+//         const urls = filterData.map((companyItem) => companyItem.url);
+//         // console.log(chunkArray(urls, 10));
+//         console.log(urls)
+//         // const tasksA = await createTaskOrder(urls)
+//         // await inlineTasks(tasksA).then(async (data) => await saveParseData(data, parserSettings.outputAddPath));
+//     })
 // })
