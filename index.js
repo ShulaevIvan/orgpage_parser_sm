@@ -1,13 +1,16 @@
 const fs = require('fs');
 const puppeteer = require('puppeteer');
+const parserSettings = require('./config/parserSettings');
 
 const { getUserParametrs, getPageStats, nextParse } = require('./parserCli/parserCli');
 const { createTaskFunc, runTasksFunc, inlineTasks } = require('./utils/tasks');
-const saveParseData = require('./utils/saveParseData');
-
-const parserSettings = require('./config/parserSettings');
 const waitForNextLine = require('./utils/wait');
+
+const readFile = require('./utils/readJsonFile');
+const writeFile = require('./utils/writeJsonFile');
+const saveParseData = require('./utils/saveParseData');
 const filterJsonData = require('./utils/fiterJson');
+const checkDataInJson = require('./utils/checkDataInJson');
 const chunkArray = require('./utils/chunkArray');
 
 const initParser = async () => {
@@ -114,6 +117,9 @@ const parseCompaniesFunction = async (page, searchUrl) => {
 
 
 const getInnerCardInfo = async (cardUrl) => {
+    const checkCard = await checkDataInJson(parserSettings.outputAddPath, cardUrl);
+    if (checkCard) return
+
     let browser = await puppeteer.launch({headless: true,});
     const page = await browser.newPage();
     await page.goto(cardUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
@@ -141,7 +147,9 @@ const getInnerCardInfo = async (cardUrl) => {
     }, cardUrl)
     await page.close();
     await browser.close();
+    await saveParseData([data], parserSettings.outputAddPath)
     console.log(`${cardUrl} - ok`)
+    
     return data;
 };
 
@@ -165,31 +173,41 @@ const createTaskOrder = async (dataArr) => {
     return res
 };
 
+const JoinCompanyData = async () => {
+    if (!fs.existsSync(parserSettings.outputPath) || !fs.existsSync(parserSettings.outputAddPath)) {
+        console.log('Requires 2 files');
+        return;
+    }
+    const mainFileData = await readFile(parserSettings.outputPath);
+    const additionalData = await readFile(parserSettings.outputAddPath);
+    const regexEmail = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;
+
+    const joinData = mainFileData.map((companyData) => {
+        const findAddData = additionalData.find((item) => item.url === companyData.url);
+        if (findAddData) {
+            const email = regexEmail.exec(findAddData.email);
+            return {
+                ...companyData,
+                email: email ? email[0] : ''
+            }
+        }
+        return {
+            ...companyData,
+            email: ''
+        }
+    });
+    await writeFile(parserSettings.outputClearPath, JSON.stringify(joinData, null, 4));
+};
+
+JoinCompanyData();
+
 
 // filterJsonData()
 // .then(async (filterData) => {
-//     const urls = filterData.map((companyItem) => companyItem.url);
+//     const urls = await (async () => filterData.map((companyItem) => companyItem.url))()
 //     const tasksA = await createTaskOrder(urls)
 //     await inlineTasks(tasksA).then(async (data) => await saveParseData(data, parserSettings.outputAddPath));
-//     // console.log(chunkArray(urls, 10));
-//     // const promArr = urls.map((url) => {
-//     //     return new Promise((resolve, reject) => {
-//     //         const data = getInnerCardInfo(url).then((data) => console.log(data));
-//     //         resolve(data)
-//     //     });
-//     // });
-//     // await Promise.all(promArr);
-
 // })
-
-filterJsonData()
-.then(async (filterData) => {
-    const urls = await (async () => filterData.map((companyItem) => companyItem.url))()
-    // console.log(chunkArray(urls, 10));
-    const tasksA = await createTaskOrder(urls)
-    await inlineTasks(tasksA).then(async (data) => await saveParseData(data, parserSettings.outputAddPath));
-    
-})
 // initParser()
 // .then(async (data) => {
 //     const { page, link, qnt } = data;
@@ -201,7 +219,6 @@ filterJsonData()
 //     .then(async (filterData) => {
 //         const urls = filterData.map((companyItem) => companyItem.url);
 //         // console.log(chunkArray(urls, 10));
-//         console.log(urls)
 //         // const tasksA = await createTaskOrder(urls)
 //         // await inlineTasks(tasksA).then(async (data) => await saveParseData(data, parserSettings.outputAddPath));
 //     })

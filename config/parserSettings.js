@@ -10,6 +10,7 @@ const parserSettings = {
     outputFileName: 'companiesData.json',
     outputPath: `${path.resolve(`${__dirname}`, '..', 'output')}/companiesData.json`,
     outputAddPath: `${path.resolve(`${__dirname}`, '..', 'output')}/additionalData.json`,
+    outputClearPath: `${path.resolve(`${__dirname}`, '..', 'output')}/clearData.json`,
     progerssBar: new cliProgress.SingleBar({
         format: 'CLI Progress |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Pages',
         barCompleteChar: '\u2588',
@@ -49,7 +50,7 @@ const parserSettings = {
     },
     savedSearchParams: {
         empty: false,
-        data: [{ name: 'Косметология', link: 'https://www.orgpage.ru/sankt-peterburg/kosmetologicheskie-uslugi/', qnt: 3078,keyNum: 2}]
+        data: [{ name: 'Студии и салоны красоты', link: 'https://www.orgpage.ru/rossiya/salony-krasoty/', qnt: 7891 ,keyNum: 2}]
     }
 };
 
